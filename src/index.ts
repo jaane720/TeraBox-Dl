@@ -37,6 +37,52 @@ Bun.serve({
       );
     }
 
+    if (pathname === "/dl") {
+      try {
+        const target = url.searchParams.get("url");
+        if (!target) {
+          return Response.json(
+            { status: "error", message: "Missing required parameter: url" },
+            { status: 400, headers: corsHeaders },
+          );
+        }
+
+        const upstream = await fetch(target, {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36",
+            Cookie: `ndus=${JSON.parse(process.env.COOKIE_JSON || "{}")["ndus"]}`,
+          },
+        });
+
+        if (!upstream.ok || !upstream.body) {
+          return Response.json(
+            {
+              status: "error",
+              message: "Failed to fetch file from TeraBox",
+              upstream_status: upstream.status,
+            },
+            { status: 502, headers: corsHeaders },
+          );
+        }
+
+        const headers = new Headers(corsHeaders);
+        const cd = upstream.headers.get("content-disposition");
+        const ct = upstream.headers.get("content-type");
+        const cl = upstream.headers.get("content-length");
+        if (cd) headers.set("Content-Disposition", cd);
+        if (ct) headers.set("Content-Type", ct);
+        if (cl) headers.set("Content-Length", cl);
+
+        return new Response(upstream.body, { headers });
+      } catch (error: any) {
+        return Response.json(
+          { status: "error", message: String(error) },
+          { status: 500, headers: corsHeaders },
+        );
+      }
+    }
+
     if (pathname === "/api") {
       try {
         const startTime = Date.now();
@@ -123,6 +169,9 @@ Bun.serve({
             ...(filename && { filename }),
             ...(size && { size }),
             ...(download && { download }),
+            ...(download && {
+              proxy_download: `${url.origin}/dl?url=${encodeURIComponent(download)}`,
+            }),
             ...(thumbs && { thumbs }),
           },
           { headers: corsHeaders },
