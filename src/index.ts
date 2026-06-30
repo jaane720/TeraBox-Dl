@@ -170,7 +170,7 @@ Bun.serve({
             ...(size && { size }),
             ...(download && { download }),
             ...(download && {
-              proxy_download: `${url.origin}/dl?url=${encodeURIComponent(download)}`,
+              proxy_download: `https://fasttera.mazashwaas.workers.dev/dl?url=${encodeURIComponent(download)}`,
             }),
             ...(thumbs && { thumbs }),
           },
