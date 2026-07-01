@@ -1,41 +1,5 @@
 import { loadCookies } from "./utils";
 
-export async function getStreamUrl(dlink: string): Promise<string | null> {
-  const cookies = loadCookies();
-  const cookieString = `ndus=${cookies["ndus"]}`;
-
-  try {
-    const response = await fetch(dlink, {
-      method: "GET",
-      redirect: "manual",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36",
-        Cookie: cookieString,
-      },
-    });
-
-    // 302 redirect — final CDN URL
-    if (response.status === 302 || response.status === 301) {
-      const location = response.headers.get("location");
-      console.log("[DEBUG] Stream URL (redirect):", location);
-      return location;
-    }
-
-    // Kuch servers 200 ke saath direct serve karte hain
-    if (response.status === 200) {
-      console.log("[DEBUG] dlink already direct, no redirect");
-      return dlink;
-    }
-
-    console.log("[DEBUG] Unexpected status for stream URL:", response.status);
-    return null;
-  } catch (error: any) {
-    console.error("[DEBUG] Error in getStreamUrl:", error);
-    return null;
-  }
-}
-
 export async function tera(surl: string): Promise<any> {
   let short_url = surl;
   if (surl.startsWith("1")) {
@@ -56,7 +20,6 @@ export async function tera(surl: string): Promise<any> {
 
   const first_url = `https://dm.terabox.app/sharing/link?surl=${surl}`;
   console.log("[DEBUG] Fetching first_url:", first_url);
-  console.log("[DEBUG] First request headers:", headers);
 
   try {
     const response = await fetch(first_url, { headers });
@@ -93,9 +56,6 @@ export async function tera(surl: string): Promise<any> {
       Origin: "https://dm.terabox.app",
       Cookie: cookieString,
     };
-
-    console.log("[DEBUG] Fetching api_url:", api_url.toString());
-    console.log("[DEBUG] API headers:", api_headers);
 
     const api_response = await fetch(api_url.toString(), {
       headers: api_headers,
