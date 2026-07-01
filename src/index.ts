@@ -1,15 +1,15 @@
-import { tera, getStreamUrl } from "./lib/terabox";
+import { tera } from "./lib/terabox";
 import { isValidShareUrl, extractSurl, formatBytes } from "./lib/utils";
 
 const port = process.env.PORT || 5000;
 
-const cache = new Map<string, { data: any; expiry: number }>();
+const cache = new Map<, { data: any; expiry: number }>();
 const CACHE_DURATION = 2 * 60 * 60 * 1000;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, Range",
 };
 
 Bun.serve({
@@ -30,6 +30,7 @@ Bun.serve({
           status: "operational",
           endpoints: {
             "/api": "Fetch files from Terabox link",
+            "/dl": "Proxy download with Range support",
           },
           timestamp: new Date().toISOString(),
         },
@@ -169,7 +170,6 @@ Bun.serve({
         let filename;
         let size;
         let download;
-        let stream_url;
         let thumbs;
 
         if (data && data.list && data.list.length > 0) {
@@ -178,11 +178,6 @@ Bun.serve({
           size = formatBytes(firstItem.size);
           download = firstItem.dlink;
           thumbs = firstItem.thumbs;
-        }
-
-        // dlink ka redirect follow karke real CDN URL nikalo
-        if (download) {
-          stream_url = await getStreamUrl(download);
         }
 
         return Response.json(
@@ -196,7 +191,6 @@ Bun.serve({
             ...(download && {
               proxy_download: `https://fasttera.mazashwaas.workers.dev/dl?url=${encodeURIComponent(download)}`,
             }),
-            ...(stream_url && { stream_url }),
             ...(thumbs && { thumbs }),
           },
           { headers: corsHeaders },
