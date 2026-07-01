@@ -1,4 +1,4 @@
-import { tera } from "./lib/terabox";
+import { tera, getStreamUrl } from "./lib/terabox";
 import { isValidShareUrl, extractSurl, formatBytes } from "./lib/utils";
 
 const port = process.env.PORT || 5000;
@@ -47,15 +47,19 @@ Bun.serve({
           );
         }
 
-        const upstream = await fetch(target, {
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36",
-            Cookie: `ndus=${JSON.parse(process.env.COOKIE_JSON || "{}")["ndus"]}`,
-          },
-        });
+        const rangeHeader = req.headers.get("range");
+        const upstreamHeaders: Record<string, string> = {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36",
+          Cookie: `ndus=${JSON.parse(process.env.COOKIE_JSON || "{}")["ndus"]}`,
+        };
+        if (rangeHeader) {
+          upstreamHeaders["Range"] = rangeHeader;
+        }
 
-        if (!upstream.ok || !upstream.body) {
+        const upstream = await fetch(target, { headers: upstreamHeaders });
+
+        if (!upstream.ok && upstream.status !== 206) {
           return Response.json(
             {
               status: "error",
@@ -66,15 +70,29 @@ Bun.serve({
           );
         }
 
+        if (!upstream.body) {
+          return Response.json(
+            { status: "error", message: "No file body from upstream" },
+            { status: 502, headers: corsHeaders },
+          );
+        }
+
         const headers = new Headers(corsHeaders);
         const cd = upstream.headers.get("content-disposition");
         const ct = upstream.headers.get("content-type");
         const cl = upstream.headers.get("content-length");
+        const cr = upstream.headers.get("content-range");
+        const ar = upstream.headers.get("accept-ranges");
         if (cd) headers.set("Content-Disposition", cd);
         if (ct) headers.set("Content-Type", ct);
         if (cl) headers.set("Content-Length", cl);
+        if (cr) headers.set("Content-Range", cr);
+        headers.set("Accept-Ranges", ar || "bytes");
 
-        return new Response(upstream.body, { headers });
+        return new Response(upstream.body, {
+          status: upstream.status,
+          headers,
+        });
       } catch (error: any) {
         return Response.json(
           { status: "error", message: String(error) },
@@ -151,6 +169,7 @@ Bun.serve({
         let filename;
         let size;
         let download;
+        let stream_url;
         let thumbs;
 
         if (data && data.list && data.list.length > 0) {
@@ -159,6 +178,11 @@ Bun.serve({
           size = formatBytes(firstItem.size);
           download = firstItem.dlink;
           thumbs = firstItem.thumbs;
+        }
+
+        // dlink ka redirect follow karke real CDN URL nikalo
+        if (download) {
+          stream_url = await getStreamUrl(download);
         }
 
         return Response.json(
@@ -172,6 +196,7 @@ Bun.serve({
             ...(download && {
               proxy_download: `https://fasttera.mazashwaas.workers.dev/dl?url=${encodeURIComponent(download)}`,
             }),
+            ...(stream_url && { stream_url }),
             ...(thumbs && { thumbs }),
           },
           { headers: corsHeaders },
